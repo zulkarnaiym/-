@@ -9,6 +9,8 @@ let currentUser = null;
 let pendingLatLng = null;
 let mapInitialized = false;
 let filterState = { name: '', region: '', district: '' };
+let userLocationMarker = null;
+let userAccuracyCircle = null;
 
 const REGIONS = [
   'Акмолинская область','Актюбинская область','Алматинская область',
@@ -305,6 +307,72 @@ function closeMobileSheet() {
   sheet.classList.remove('open');
   backdrop.classList.remove('open');
   document.body.style.overflow = '';
+}
+
+// ─── GEOLOCATION ───────────────────────────────────────────────────────────────
+
+function locateUser() {
+  if (!navigator.geolocation) {
+    showToast('Геолокация не поддерживается браузером', 'error');
+    return;
+  }
+
+  const btn = document.getElementById('locateBtn');
+  if (btn) { btn.classList.add('locating'); btn.disabled = true; }
+
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      if (btn) { btn.classList.remove('locating'); btn.disabled = false; }
+      updateUserLocation(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy);
+    },
+    (err) => {
+      if (btn) { btn.classList.remove('locating'); btn.disabled = false; }
+      const msgs = {
+        1: 'Доступ к геолокации запрещён — разрешите в настройках браузера',
+        2: 'Не удалось определить местоположение',
+        3: 'Превышено время ожидания геолокации',
+      };
+      showToast(msgs[err.code] || 'Ошибка геолокации', 'error');
+    },
+    { enableHighAccuracy: true, timeout: 12000, maximumAge: 60000 }
+  );
+}
+
+function updateUserLocation(lat, lng, accuracy) {
+  if (!map) return;
+
+  if (userAccuracyCircle) { map.removeLayer(userAccuracyCircle); userAccuracyCircle = null; }
+  if (userLocationMarker) { map.removeLayer(userLocationMarker); userLocationMarker = null; }
+
+  userAccuracyCircle = L.circle([lat, lng], {
+    radius: accuracy,
+    color: '#2196F3',
+    fillColor: '#2196F3',
+    fillOpacity: 0.08,
+    weight: 1,
+    opacity: 0.35,
+    interactive: false,
+  }).addTo(map);
+
+  const icon = L.divIcon({
+    className: '',
+    html: '<div class="user-location-dot"></div>',
+    iconSize: [20, 20],
+    iconAnchor: [10, 10],
+  });
+
+  userLocationMarker = L.marker([lat, lng], { icon, zIndexOffset: 2000 })
+    .addTo(map)
+    .bindPopup(
+      `<div style="text-align:center;padding:6px 10px;font-size:13px;white-space:nowrap">
+        📍 <strong>Вы здесь</strong><br>
+        <span style="font-size:11px;color:#8a8f9e">Точность: ±${Math.round(accuracy)} м</span>
+      </div>`,
+      { closeButton: false }
+    );
+
+  map.flyTo([lat, lng], Math.max(map.getZoom(), 13), { duration: 1.2 });
+  showToast('Местоположение найдено', 'success');
 }
 
 function clearFilters() {

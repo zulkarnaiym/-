@@ -1019,6 +1019,61 @@ select option { background: var(--surface); }
 
 /* ─── RESPONSIVE ─────────────────────────────────────────────────────── */
 
+/* ─── GEOLOCATION ────────────────────────────────────────────────────────── */
+
+.locate-btn {
+  position: absolute;
+  bottom: 56px;
+  left: 14px;
+  width: 36px;
+  height: 36px;
+  background: var(--surface);
+  border: 1px solid var(--border2);
+  border-radius: var(--radius-sm);
+  color: var(--text2);
+  cursor: pointer;
+  z-index: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: var(--shadow);
+  transition: all 0.2s;
+  padding: 0;
+}
+
+.locate-btn svg { width: 18px; height: 18px; }
+
+.locate-btn:hover {
+  background: var(--surface2);
+  color: #2196F3;
+  border-color: #2196F3;
+  box-shadow: 0 0 0 3px rgba(33,150,243,0.15);
+}
+
+.locate-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.locate-btn.locating svg {
+  animation: spin 1s linear infinite;
+  color: #2196F3;
+}
+
+/* Pulsing user location dot */
+.user-location-dot {
+  width: 18px;
+  height: 18px;
+  background: #2196F3;
+  border-radius: 50%;
+  border: 3px solid #fff;
+  box-shadow: 0 0 0 rgba(33,150,243,0.5);
+  animation: locationPulse 2s infinite;
+}
+
+@keyframes locationPulse {
+  0%   { box-shadow: 0 0 0 0   rgba(33,150,243,0.5); }
+  70%  { box-shadow: 0 0 0 12px rgba(33,150,243,0);   }
+  100% { box-shadow: 0 0 0 0   rgba(33,150,243,0);   }
+}
+
 /* ─── MOBILE BOTTOM SHEET ────────────────────────────────────────────────── */
 
 /* Hidden on desktop */
@@ -1165,6 +1220,13 @@ select option { background: var(--surface); }
     font-size: 11px;
     padding: 5px 10px;
   }
+  .locate-btn {
+    bottom: 58px;   /* above mine-count-badge */
+    left: 14px;
+    width: 40px;
+    height: 40px;   /* bigger touch target */
+  }
+  .locate-btn svg { width: 20px; height: 20px; }
 
   /* ── MEDIA GALLERY ───────────────────────────────────────────────── */
   .media-item { width: 76px; height: 76px; }
