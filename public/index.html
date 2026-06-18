@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Родник — Карта месторождений Казахстана</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="leaflet.css" />
+</head>
+<body>
+
+<!-- TOAST CONTAINER -->
+<div class="toast-container" id="toastContainer"></div>
+
+<!-- ═══════════════════════════════════════════════ LANDING VIEW -->
+<div id="landing-view" class="view active">
+
+  <!-- Hero -->
+  <section class="hero">
+    <div class="hero-badge">💧 Карта родников</div>
+    <h1>Родник</h1>
+    <p class="hero-tagline">Интерактивная карта родников и источников Казахстана</p>
+    <p class="hero-desc">
+      Исследуйте родники и природные источники Казахстана на интерактивной карте.
+      Добавляйте новые родники, ведите заметки и отслеживайте их состояние
+      в режиме реального времени.
+    </p>
+    <div class="hero-cta">
+      <button class="btn btn-primary btn-lg" onclick="showView('auth', 'login')">⚡ Войти</button>
+      <button class="btn btn-outline btn-lg" onclick="showView('auth', 'register')">Зарегистрироваться</button>
+    </div>
+  </section>
+
+  <!-- Features -->
+  <section class="features">
+    <div class="features-grid">
+      <div class="feature-card">
+        <div class="feature-icon">🗺️</div>
+        <h3>Интерактивная карта</h3>
+        <p>Отмечайте и изучайте родники на карте с цветовой индикацией по типу и статусу</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">📋</div>
+        <h3>Подробные карточки</h3>
+        <p>Вся информация о роднике в одном месте: тип, статус, глубина, год открытия и описание</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">💬</div>
+        <h3>Заметки и комментарии</h3>
+        <p>Добавляйте наблюдения, пробы воды и полевые заметки к каждому роднику</p>
+      </div>
+    </div>
+  </section>
+
+  <footer class="footer">Родник &copy; 2024 — Карта родников и источников Казахстана</footer>
+</div>
+
+<!-- ═══════════════════════════════════════════════ AUTH VIEW -->
+<div id="auth-view" class="view">
+  <div class="auth-card">
+    <div class="auth-logo">
+      <h2>💧 Родник</h2>
+      <p>Войдите или создайте аккаунт</p>
+    </div>
+
+    <div class="auth-tabs">
+      <button class="auth-tab active" id="loginTab" onclick="switchAuthTab('login')">Войти</button>
+      <button class="auth-tab" id="registerTab" onclick="switchAuthTab('register')">Регистрация</button>
+    </div>
+
+    <!-- Login Form -->
+    <div class="auth-form active" id="loginForm">
+      <div class="form-group">
+        <label>Имя пользователя</label>
+        <input type="text" id="loginUsername" placeholder="Введите имя пользователя" autocomplete="username" />
+      </div>
+      <div class="form-group">
+        <label>Пароль</label>
+        <input type="password" id="loginPassword" placeholder="Введите пароль" autocomplete="current-password" />
+      </div>
+      <div class="error-msg" id="loginError"></div>
+      <button class="btn btn-primary" id="loginBtn" onclick="handleLogin()">Войти</button>
+      <div class="auth-footer">
+        Нет аккаунта? <a onclick="switchAuthTab('register')">Зарегистрироваться</a>
+      </div>
+    </div>
+
+    <!-- Register Form -->
+    <div class="auth-form" id="registerForm">
+      <div class="form-group">
+        <label>Имя пользователя</label>
+        <input type="text" id="regUsername" placeholder="Минимум 3 символа" autocomplete="username" />
+      </div>
+      <div class="form-group">
+        <label>Пароль</label>
+        <input type="password" id="regPassword" placeholder="Минимум 6 символов" autocomplete="new-password" />
+      </div>
+      <div class="form-group">
+        <label>Подтверждение пароля</label>
+        <input type="password" id="regConfirm" placeholder="Повторите пароль" autocomplete="new-password" />
+      </div>
+      <div class="error-msg" id="registerError"></div>
+      <button class="btn btn-primary" id="registerBtn" onclick="handleRegister()">Создать аккаунт</button>
+      <div class="auth-footer">
+        Уже есть аккаунт? <a onclick="switchAuthTab('login')">Войти</a>
+      </div>
+    </div>
+
+    <div style="margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); text-align: center;">
+      <button class="btn btn-ghost btn-sm" onclick="showView('landing')">← На главную</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════ MAP VIEW -->
+<div id="map-view" class="view">
+
+  <!-- Navbar -->
+  <nav class="navbar">
+    <span class="nav-brand">💧 Родник</span>
+    <div class="nav-right">
+      <span class="nav-user" id="navUsername"></span>
+      <button class="btn btn-outline btn-sm" onclick="openAddModal(null)">➕ Добавить</button>
+      <button class="btn btn-ghost btn-sm" onclick="handleLogout()">Выйти</button>
+    </div>
+  </nav>
+
+  <!-- Map Container -->
+  <div style="position:relative; flex:1;">
+    <div id="map"></div>
+
+    <!-- Search Panel -->
+    <div class="search-panel" id="searchPanel">
+      <input type="text" id="searchName" class="search-input" placeholder="🔍 Поиск по названию..." oninput="applyFilters()" />
+      <div class="search-row">
+        <select id="searchRegion" class="search-input" onchange="applyFilters()">
+          <option value="">Все регионы</option>
+        </select>
+        <input type="text" id="searchDistrict" class="search-input" placeholder="Район..." oninput="applyFilters()" />
+      </div>
+      <div class="search-footer" id="searchFooter" style="display:none">
+        <button class="btn btn-ghost btn-sm" onclick="clearFilters()">✕ Сбросить</button>
+        <span class="search-count" id="searchCount"></span>
+      </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div class="map-loader" id="mapLoader">
+      <div class="spinner"></div>
+      <span class="map-loader-text">Загрузка родников…</span>
+    </div>
+
+    <!-- Mine Count -->
+    <div class="mine-count-badge" id="mineCountBadge" style="display:none">
+      Родников: <strong id="mineCount">0</strong>
+    </div>
+
+    <!-- Hint -->
+    <div class="map-hint">💡 Нажмите на карту чтобы добавить родник</div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════ ADD MINE MODAL -->
+<div class="modal-overlay" id="addMineModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>➕ Добавить родник</h3>
+      <button class="modal-close" onclick="closeAddModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>Название *</label>
+        <input type="text" id="addName" placeholder="Название родника или источника" />
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Тип *</label>
+          <select id="addType">
+            <option value="">— Выберите —</option>
+            <option value="Родник">Родник</option>
+            <option value="Источник">Источник</option>
+            <option value="Колодец">Колодец</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Статус *</label>
+          <select id="addStatus">
+            <option value="">— Выберите —</option>
+            <option value="Активный">Активный</option>
+            <option value="Законсервирован">Законсервирован</option>
+            <option value="Закрыт">Закрыт</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Глубина (м)</label>
+          <input type="number" id="addDepth" placeholder="0" min="0" />
+        </div>
+        <div class="form-group">
+          <label>Год открытия</label>
+          <input type="number" id="addYear" placeholder="напр. 1960" min="1700" max="2100" />
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Описание</label>
+        <textarea id="addDesc" rows="3" placeholder="Краткое описание объекта…"></textarea>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Регион</label>
+          <select id="addRegion">
+            <option value="">— Выберите —</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Район</label>
+          <input type="text" id="addDistrict" placeholder="напр. Алматинский район" />
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Широта *</label>
+          <input type="number" id="addLat" step="0.00001" placeholder="напр. 48.0123" />
+        </div>
+        <div class="form-group">
+          <label>Долгота *</label>
+          <input type="number" id="addLng" step="0.00001" placeholder="напр. 68.5432" />
+        </div>
+      </div>
+      <button type="button" class="btn btn-ghost btn-sm coords-preview-btn" onclick="previewCoords()">📍 Показать место на карте</button>
+
+      <div class="modal-section-title">💧 Показатели качества воды</div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>pH (водородный индекс)</label>
+          <input type="number" id="addPh" placeholder="напр. 7.5" step="0.1" min="0" max="14" oninput="calcAddWQ()" />
+        </div>
+        <div class="form-group">
+          <label>Минерализация (мг/л)</label>
+          <input type="number" id="addMineralization" placeholder="напр. 200" min="0" oninput="calcAddWQ()" />
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Проводимость (мкСм/см)</label>
+          <input type="number" id="addConductivity" placeholder="напр. 320" min="0" oninput="calcAddWQ()" />
+        </div>
+        <div class="form-group">
+          <label>Жёсткость (мг-экв/л)</label>
+          <input type="number" id="addHardness" placeholder="напр. 3.5" step="0.1" min="0" oninput="calcAddWQ()" />
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Температура воды (°C)</label>
+          <input type="number" id="addTemperature" placeholder="напр. 8" step="0.5" />
+        </div>
+        <div class="form-group">
+          <label>Качество воды</label>
+          <div id="addWQBadge" class="wq-auto-badge">— введите показатели —</div>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Характер примесей / Осадок</label>
+        <input type="text" id="addSediment" placeholder="напр. Нет / Небольшой осадок" />
+      </div>
+
+      <div class="error-msg" id="addMineError"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeAddModal()">Отмена</button>
+      <button class="btn btn-primary" id="addMineBtn" onclick="handleAddMine()">Сохранить объект</button>
+    </div>
+  </div>
+</div>
+
+<script src="leaflet.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
