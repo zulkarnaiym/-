@@ -21,7 +21,7 @@ import jwt
 DB_PATH = os.path.join(os.path.dirname(__file__), 'mines.db')
 JWT_SECRET = 'mineralKarta_secret_key_2024_kazakh_mines'
 STATIC_DIR = os.path.join(os.path.dirname(__file__), 'public')
-PORT = 3000
+PORT = int(os.environ.get('PORT', 3000))
 
 app = Flask(__name__, static_folder=STATIC_DIR)
 
