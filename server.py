@@ -810,4 +810,4 @@ if __name__ == '__main__':
     print(f"\n🪨  МинералКарта запущена на http://localhost:{PORT}")
     print(f"📦  База данных: mines.db")
     print(f"👤  Тестовый аккаунт: admin / admin123\n")
-    app.run(port=PORT, debug=False)
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', PORT)), debug=False)
