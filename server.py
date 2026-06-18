@@ -13,7 +13,9 @@ import os
 import time
 import functools
 import urllib.request
+import uuid
 from flask import Flask, request, jsonify, send_from_directory, send_file, Response
+from werkzeug.utils import secure_filename
 import jwt
 
 # ─── CONFIG ───────────────────────────────────────────────────────────────────
@@ -21,9 +23,21 @@ import jwt
 DB_PATH = os.path.join(os.path.dirname(__file__), 'mines.db')
 JWT_SECRET = 'mineralKarta_secret_key_2024_kazakh_mines'
 STATIC_DIR = os.path.join(os.path.dirname(__file__), 'public')
+UPLOAD_DIR = os.path.join(os.path.dirname(__file__), 'uploads')
 PORT = int(os.environ.get('PORT', 3000))
 
+ALLOWED_IMAGE_EXT = {'jpg', 'jpeg', 'png', 'gif', 'webp'}
+ALLOWED_VIDEO_EXT = {'mp4', 'webm', 'mov', 'avi', 'mkv'}
+
 app = Flask(__name__, static_folder=STATIC_DIR)
+app.config['MAX_CONTENT_LENGTH'] = 200 * 1024 * 1024  # 200 MB
+
+def allowed_file(filename):
+    ext = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
+    return ext, ext in (ALLOWED_IMAGE_EXT | ALLOWED_VIDEO_EXT)
+
+def media_type_from_ext(ext):
+    return 'photo' if ext in ALLOWED_IMAGE_EXT else 'video'
 
 # ─── DATABASE ─────────────────────────────────────────────────────────────────
 
@@ -73,6 +87,18 @@ def init_db():
             mine_id INTEGER NOT NULL,
             user_id INTEGER NOT NULL,
             content TEXT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (mine_id) REFERENCES mines(id) ON DELETE CASCADE,
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS media (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            mine_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+            filename TEXT NOT NULL,
+            original_name TEXT,
+            media_type TEXT NOT NULL,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (mine_id) REFERENCES mines(id) ON DELETE CASCADE,
             FOREIGN KEY (user_id) REFERENCES users(id)
@@ -754,7 +780,17 @@ def delete_mine(mine_id):
         if mine['user_id'] != request.current_user['id']:
             return jsonify({'error': 'Нет прав для удаления'}), 403
 
+        media_rows = conn.execute("SELECT filename FROM media WHERE mine_id=?", (mine_id,)).fetchall()
+        for row in media_rows:
+            filepath = os.path.join(UPLOAD_DIR, row['filename'])
+            if os.path.exists(filepath):
+                try:
+                    os.remove(filepath)
+                except Exception:
+                    pass
+
         conn.execute("DELETE FROM notes WHERE mine_id=?", (mine_id,))
+        conn.execute("DELETE FROM media WHERE mine_id=?", (mine_id,))
         conn.execute("DELETE FROM mines WHERE id=?", (mine_id,))
         conn.commit()
         return jsonify({'message': 'Объект удалён'})
@@ -802,6 +838,88 @@ def add_note(mine_id):
         return jsonify(row_to_dict(note)), 201
     finally:
         conn.close()
+
+# ─── MEDIA ROUTES ─────────────────────────────────────────────────────────────
+
+@app.route('/api/mines/<int:mine_id>/media', methods=['GET'])
+def get_media(mine_id):
+    conn = get_db()
+    try:
+        rows = conn.execute("""
+            SELECT m.*, u.username FROM media m
+            JOIN users u ON u.id = m.user_id
+            WHERE m.mine_id=? ORDER BY m.created_at ASC
+        """, (mine_id,)).fetchall()
+        return jsonify(rows_to_list(rows))
+    finally:
+        conn.close()
+
+@app.route('/api/mines/<int:mine_id>/media', methods=['POST'])
+@require_auth
+def upload_media(mine_id):
+    conn = get_db()
+    try:
+        mine = conn.execute("SELECT id FROM mines WHERE id=?", (mine_id,)).fetchone()
+        if not mine:
+            return jsonify({'error': 'Объект не найден'}), 404
+
+        if 'file' not in request.files:
+            return jsonify({'error': 'Файл не выбран'}), 400
+
+        file = request.files['file']
+        if not file.filename:
+            return jsonify({'error': 'Файл не выбран'}), 400
+
+        original_name = secure_filename(file.filename)
+        ext, ok = allowed_file(original_name)
+        if not ok:
+            return jsonify({'error': 'Недопустимый формат. Разрешены: jpg, png, gif, webp, mp4, webm, mov, avi, mkv'}), 400
+
+        unique_name = f"{uuid.uuid4().hex}.{ext}"
+        os.makedirs(UPLOAD_DIR, exist_ok=True)
+        file.save(os.path.join(UPLOAD_DIR, unique_name))
+
+        mtype = media_type_from_ext(ext)
+        c = conn.execute(
+            "INSERT INTO media (mine_id, user_id, filename, original_name, media_type) VALUES (?,?,?,?,?)",
+            (mine_id, request.current_user['id'], unique_name, original_name, mtype)
+        )
+        conn.commit()
+
+        row = conn.execute("""
+            SELECT m.*, u.username FROM media m
+            JOIN users u ON u.id = m.user_id WHERE m.id=?
+        """, (c.lastrowid,)).fetchone()
+        return jsonify(row_to_dict(row)), 201
+    finally:
+        conn.close()
+
+@app.route('/api/mines/<int:mine_id>/media/<int:media_id>', methods=['DELETE'])
+@require_auth
+def delete_media(mine_id, media_id):
+    conn = get_db()
+    try:
+        row = conn.execute("SELECT * FROM media WHERE id=? AND mine_id=?", (media_id, mine_id)).fetchone()
+        if not row:
+            return jsonify({'error': 'Файл не найден'}), 404
+
+        mine = conn.execute("SELECT user_id FROM mines WHERE id=?", (mine_id,)).fetchone()
+        if row['user_id'] != request.current_user['id'] and mine['user_id'] != request.current_user['id']:
+            return jsonify({'error': 'Нет прав для удаления'}), 403
+
+        filepath = os.path.join(UPLOAD_DIR, row['filename'])
+        if os.path.exists(filepath):
+            os.remove(filepath)
+
+        conn.execute("DELETE FROM media WHERE id=?", (media_id,))
+        conn.commit()
+        return jsonify({'message': 'Файл удалён'})
+    finally:
+        conn.close()
+
+@app.route('/uploads/<path:filename>')
+def serve_upload(filename):
+    return send_from_directory(UPLOAD_DIR, filename)
 
 # ─── RUN ──────────────────────────────────────────────────────────────────────
 

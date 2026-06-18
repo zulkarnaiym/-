@@ -1,5 +1,7 @@
 // ─── STATE ────────────────────────────────────────────────────────────────────
 
+function isMobile() { return window.innerWidth <= 600; }
+
 let map = null;
 let markers = {};
 let mines = [];
@@ -239,6 +241,7 @@ function initMap() {
 // ─── MINES ─────────────────────────────────────────────────────────────────────
 
 async function loadMines() {
+  closeMobileSheet();
   document.getElementById('mapLoader').style.display = 'flex';
   document.getElementById('mineCountBadge').style.display = 'none';
 
@@ -273,6 +276,35 @@ function applyFilters() {
   const active = filterState.name || filterState.region || filterState.district;
   const footer = document.getElementById('searchFooter');
   if (footer) footer.style.display = active ? 'flex' : 'none';
+}
+
+function toggleSearch() {
+  const panel = document.getElementById('searchPanel');
+  const btn = document.getElementById('searchToggleBtn');
+  const open = panel.classList.toggle('mobile-open');
+  btn.textContent = open ? '✕' : '🔍';
+  btn.title = open ? 'Закрыть поиск' : 'Поиск';
+}
+
+// ─── MOBILE SHEET ──────────────────────────────────────────────────────────────
+
+function openMobileSheet(mine) {
+  const body = document.getElementById('mobileSheetBody');
+  if (!body) return;
+  body.innerHTML = '';
+  body.appendChild(createPopupContent(mine));
+  document.getElementById('mobileSheet').classList.add('open');
+  document.getElementById('mobileSheetBackdrop').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeMobileSheet() {
+  const sheet = document.getElementById('mobileSheet');
+  const backdrop = document.getElementById('mobileSheetBackdrop');
+  if (!sheet) return;
+  sheet.classList.remove('open');
+  backdrop.classList.remove('open');
+  document.body.style.overflow = '';
 }
 
 function clearFilters() {
@@ -325,15 +357,19 @@ function renderMarkers() {
       popupAnchor: [0, -32]
     });
 
-    const marker = L.marker([mine.lat, mine.lng], { icon })
-      .addTo(map)
-      .bindPopup(() => createPopupContent(mine), {
+    const marker = L.marker([mine.lat, mine.lng], { icon }).addTo(map);
+
+    if (isMobile()) {
+      marker.on('click', () => openMobileSheet(mine));
+    } else {
+      marker.bindPopup(() => createPopupContent(mine), {
         maxWidth: 360,
         minWidth: 300,
         className: 'mine-popup',
         autoPan: true,
         autoPanPadding: [20, 80]
       });
+    }
 
     markers[mine.id] = marker;
   });
@@ -531,6 +567,18 @@ function createPopupContent(mine) {
       ${createWQPanel(mine)}
 
       <hr class="popup-divider" />
+      <div class="popup-section-label">📷 Фото и видео</div>
+      <div class="media-gallery" id="mediaGallery-${mine.id}">
+        <div class="no-notes">Загрузка…</div>
+      </div>
+      ${currentUser ? `
+        <div class="media-upload-row">
+          <label class="btn btn-ghost btn-sm media-upload-btn" for="mediaInput-${mine.id}">+ Добавить фото / видео</label>
+          <input type="file" id="mediaInput-${mine.id}" accept="image/*,video/mp4,video/webm,video/mov,video/avi" multiple style="display:none" onchange="handleMediaUpload(${mine.id}, this)" />
+        </div>
+      ` : ''}
+
+      <hr class="popup-divider" />
       <div class="popup-notes-label">💬 Заметки <span style="color:var(--text3);font-weight:400">(${mine.note_count || 0})</span></div>
       <div class="notes-list" id="notesList-${mine.id}">
         <div class="no-notes">Загрузка заметок…</div>
@@ -645,8 +693,8 @@ function createPopupContent(mine) {
     </div>
   `;
 
-  // Load notes asynchronously
   loadNotes(mine.id);
+  loadMedia(mine.id);
 
   return div;
 }
@@ -754,6 +802,113 @@ async function handleAddNote(mineId) {
   } catch (err) {
     showToast(err.message, 'error');
   }
+}
+
+// ─── MEDIA ─────────────────────────────────────────────────────────────────────
+
+async function loadMedia(mineId) {
+  const gallery = document.getElementById(`mediaGallery-${mineId}`);
+  if (!gallery) return;
+
+  try {
+    const items = await api('GET', `/api/mines/${mineId}/media`);
+    if (items.length === 0) {
+      gallery.innerHTML = '<div class="no-notes">Фото и видео пока нет</div>';
+      return;
+    }
+
+    gallery.innerHTML = items.map(item => {
+      const canDelete = currentUser && (currentUser.id === item.user_id || currentUser.id === item.mine_owner_id);
+      const deleteBtn = currentUser
+        ? `<button class="media-delete-btn" title="Удалить" onclick="handleDeleteMedia(${mineId}, ${item.id})">✕</button>`
+        : '';
+
+      if (item.media_type === 'photo') {
+        return `<div class="media-item">
+          <img src="/uploads/${escAttr(item.filename)}" alt="${escAttr(item.original_name || 'фото')}"
+               onclick="openLightbox('/uploads/${escAttr(item.filename)}')" loading="lazy" />
+          ${deleteBtn}
+          <div class="media-item-author">@${escHtml(item.username)}</div>
+        </div>`;
+      } else {
+        return `<div class="media-item media-item-video">
+          <video src="/uploads/${escAttr(item.filename)}" controls preload="metadata"></video>
+          ${deleteBtn}
+          <div class="media-item-author">@${escHtml(item.username)}</div>
+        </div>`;
+      }
+    }).join('');
+  } catch (err) {
+    gallery.innerHTML = '<div class="no-notes">Ошибка загрузки медиа</div>';
+  }
+}
+
+async function handleMediaUpload(mineId, inputEl) {
+  const files = Array.from(inputEl.files);
+  if (!files.length) return;
+
+  const token = localStorage.getItem('token');
+  let uploaded = 0;
+
+  const label = document.querySelector(`label[for="mediaInput-${mineId}"]`);
+  if (label) { label.textContent = 'Загрузка…'; label.style.pointerEvents = 'none'; }
+
+  for (const file of files) {
+    const formData = new FormData();
+    formData.append('file', file);
+    try {
+      const res = await fetch(`/api/mines/${mineId}/media`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Ошибка загрузки');
+      uploaded++;
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  }
+
+  if (label) { label.textContent = '+ Добавить фото / видео'; label.style.pointerEvents = ''; }
+  inputEl.value = '';
+
+  if (uploaded > 0) {
+    showToast(`Загружено: ${uploaded} файл(ов)`, 'success');
+    await loadMedia(mineId);
+  }
+}
+
+async function handleDeleteMedia(mineId, mediaId) {
+  if (!confirm('Удалить этот файл?')) return;
+  try {
+    await api('DELETE', `/api/mines/${mineId}/media/${mediaId}`);
+    showToast('Файл удалён', 'success');
+    await loadMedia(mineId);
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+function openLightbox(src) {
+  let lb = document.getElementById('lightbox');
+  if (!lb) {
+    lb = document.createElement('div');
+    lb.id = 'lightbox';
+    lb.className = 'lightbox';
+    lb.innerHTML = '<img id="lightboxImg" /><button class="lightbox-close" onclick="closeLightbox()">✕</button>';
+    lb.addEventListener('click', e => { if (e.target === lb) closeLightbox(); });
+    document.body.appendChild(lb);
+  }
+  document.getElementById('lightboxImg').src = src;
+  lb.classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeLightbox() {
+  const lb = document.getElementById('lightbox');
+  if (lb) lb.classList.remove('open');
+  document.body.style.overflow = '';
 }
 
 // ─── ADD MINE MODAL ────────────────────────────────────────────────────────────

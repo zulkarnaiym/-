@@ -120,7 +120,8 @@
     <span class="nav-brand">💧 Родник</span>
     <div class="nav-right">
       <span class="nav-user" id="navUsername"></span>
-      <button class="btn btn-outline btn-sm" onclick="openAddModal(null)">➕ Добавить</button>
+      <button class="btn btn-ghost btn-sm nav-search-toggle" id="searchToggleBtn" onclick="toggleSearch()" title="Поиск">🔍</button>
+      <button class="btn btn-outline btn-sm" onclick="openAddModal(null)">➕ <span class="btn-add-label">Добавить</span></button>
       <button class="btn btn-ghost btn-sm" onclick="handleLogout()">Выйти</button>
     </div>
   </nav>
@@ -157,6 +158,9 @@
 
     <!-- Hint -->
     <div class="map-hint">💡 Нажмите на карту чтобы добавить родник</div>
+
+    <!-- FAB: Add mine (mobile only) -->
+    <button class="fab" onclick="openAddModal(null)" title="Добавить родник">➕</button>
   </div>
 </div>
 
@@ -273,6 +277,13 @@
       <button class="btn btn-primary" id="addMineBtn" onclick="handleAddMine()">Сохранить объект</button>
     </div>
   </div>
+</div>
+
+<!-- ═══════════════════════ MOBILE BOTTOM SHEET -->
+<div class="mobile-sheet-backdrop" id="mobileSheetBackdrop" onclick="closeMobileSheet()"></div>
+<div class="mobile-sheet" id="mobileSheet">
+  <div class="mobile-sheet-handle"></div>
+  <div class="mobile-sheet-body" id="mobileSheetBody"></div>
 </div>
 
 <script src="leaflet.js"></script>
